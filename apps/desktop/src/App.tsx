@@ -1,41 +1,54 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import './App.css';
 
 type Mode = 'chat' | 'email' | 'search' | 'notes' | 'code';
 type Lang = 'es' | 'en' | 'pt';
+type Status = 'idle' | 'recording' | 'transcribing' | 'done';
 
-const MODES: { key: Mode; label: string; icon: string }[] = [
-  { key: 'chat', label: 'Chat', icon: '💬' },
-  { key: 'email', label: 'Email', icon: '📧' },
-  { key: 'search', label: 'Buscar', icon: '🔍' },
-  { key: 'notes', label: 'Notas', icon: '📝' },
-  { key: 'code', label: 'Código', icon: '💻' },
-];
-
-const LANGUAGES: { key: Lang; label: string }[] = [
-  { key: 'es', label: 'Español' },
-  { key: 'en', label: 'English' },
-  { key: 'pt', label: 'Português' },
-];
+const LANGUAGES: Record<Lang, string> = {
+  es: 'ES',
+  en: 'EN',
+  pt: 'PT',
+};
 
 function App() {
   const [mode, setMode] = useState<Mode>('chat');
   const [lang, setLang] = useState<Lang>('es');
-  const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
-  const [result, setResult] = useState('');
+  const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const startTime = useRef(0);
+
+  const modeIcon: Record<Mode, string> = {
+    chat: '💬',
+    email: '📧',
+    search: '🔍',
+    notes: '📝',
+    code: '💻',
+  };
+
+  // Auto-show on mount, ping backend
+  useEffect(() => {
+    fetch('http://localhost:3001/api/health')
+      .catch(() => setError('Backend no disponible'));
+  }, []);
+
+  // Auto-hide 1.5s after done
+  useEffect(() => {
+    if (status === 'done') {
+      const t = setTimeout(() => setStatus('idle'), 1500);
+      return () => clearTimeout(t);
+    }
+  }, [status]);
 
   const startRecording = useCallback(async () => {
     try {
       setError('');
-      setResult('');
+      chunks.current = [];
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      chunks.current = [];
       mediaRecorder.current = recorder;
 
       recorder.ondataavailable = (e) => {
@@ -49,21 +62,21 @@ function App() {
       };
 
       recorder.start();
-      setRecording(true);
-    } catch (err) {
-      setError('No se pudo acceder al micrófono. Verifica los permisos.');
+      startTime.current = Date.now();
+      setStatus('recording');
+    } catch {
+      setError('Micrófono no disponible');
     }
   }, [mode, lang]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorder.current && mediaRecorder.current.state !== 'inactive') {
       mediaRecorder.current.stop();
-      setRecording(false);
     }
   }, []);
 
   const sendToBackend = async (audioBlob: Blob) => {
-    setTranscribing(true);
+    setStatus('transcribing');
     try {
       const formData = new FormData();
       formData.append('file', audioBlob, 'recording.webm');
@@ -75,90 +88,86 @@ function App() {
         body: formData,
       });
 
-      if (!res.ok) throw new Error(`Error ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new Error(`Error ${res.status}`);
       const data = await res.json();
-      setResult(data.text || '');
+      const text = data.text || '';
+
+      if (text && (window as any).parla?.paste) {
+        (window as any).parla.paste(text);
+      }
+      setStatus('done');
     } catch (err: any) {
-      setError(err.message || 'Error al transcribir');
-    } finally {
-      setTranscribing(false);
+      setError(err.message || 'Error');
+      setStatus('idle');
     }
   };
 
-  const copyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(result);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setError('No se pudo copiar al portapapeles');
+  const handleClick = () => {
+    if (status === 'recording') {
+      stopRecording();
+    } else if (status === 'idle' || status === 'done') {
+      startRecording();
+    }
+  };
+
+  const buttonContent = () => {
+    switch (status) {
+      case 'idle': return '🎤';
+      case 'recording': return '⏹';
+      case 'transcribing': return '⏳';
+      case 'done': return '✅';
+    }
+  };
+
+  const buttonClass = () => {
+    switch (status) {
+      case 'recording': return 'record-btn recording';
+      case 'transcribing': return 'record-btn transcribing';
+      case 'done': return 'record-btn done';
+      default: return 'record-btn';
     }
   };
 
   return (
-    <div className="app">
-      <header className="header">
-        <h1>Parla</h1>
-        <p className="subtitle">Dictado por voz</p>
-      </header>
+    <div className="overlay" onMouseEnter={() => setShowSettings(true)} onMouseLeave={() => setShowSettings(false)}>
+      {/* Main button row */}
+      <div className="row">
+        <button className={buttonClass()} onClick={handleClick} disabled={status === 'transcribing'}>
+          {buttonContent()}
+        </button>
+        {status === 'recording' && <span className="status-recording">● Grabando</span>}
+        {status === 'transcribing' && <span className="status-transcribing">Transcribiendo...</span>}
+        {status === 'done' && <span className="status-done">✱ Pegado</span>}
+      </div>
 
-      <section className="controls">
-        <div className="mode-selector">
-          <label>Modo</label>
-          <div className="mode-buttons">
-            {MODES.map((m) => (
+      {/* Settings (show on hover) */}
+      {showSettings && status !== 'recording' && status !== 'transcribing' && (
+        <div className="settings">
+          <div className="mode-icons">
+            {(Object.entries(modeIcon) as [Mode, string][]).map(([key, icon]) => (
               <button
-                key={m.key}
-                className={`mode-btn ${mode === m.key ? 'active' : ''}`}
-                onClick={() => setMode(m.key)}
-                disabled={recording || transcribing}
+                key={key}
+                className={`mode-icon-btn ${mode === key ? 'active' : ''}`}
+                onClick={() => setMode(key)}
+                title={key}
               >
-                <span className="mode-icon">{m.icon}</span>
-                {m.label}
+                {icon}
               </button>
             ))}
           </div>
-        </div>
-
-        <div className="lang-selector">
-          <label>Idioma</label>
           <select
+            className="lang-select"
             value={lang}
             onChange={(e) => setLang(e.target.value as Lang)}
-            disabled={recording || transcribing}
           >
-            {LANGUAGES.map((l) => (
-              <option key={l.key} value={l.key}>
-                {l.label}
-              </option>
+            {Object.entries(LANGUAGES).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
             ))}
           </select>
         </div>
-      </section>
-
-      <section className="recorder">
-        <button
-          className={`record-btn ${recording ? 'recording' : ''}`}
-          onClick={recording ? stopRecording : startRecording}
-          disabled={transcribing}
-        >
-          {recording ? '⏹ Detener' : transcribing ? '⏳ Transcribiendo...' : '🎤 Grabar'}
-        </button>
-      </section>
+      )}
 
       {error && <div className="error">{error}</div>}
-
-      {result && (
-        <section className="result">
-          <div className="result-header">
-            <h2>Resultado</h2>
-            <button className="copy-btn" onClick={copyToClipboard}>
-              {copied ? '✅ Copiado' : '📋 Copiar'}
-            </button>
-          </div>
-          <textarea readOnly value={result} rows={6} />
-        </section>
-      )}
     </div>
   );
 }
