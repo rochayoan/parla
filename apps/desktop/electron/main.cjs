@@ -10,16 +10,17 @@ function createWindow() {
   const { width: screenW, height: screenH } = primaryDisplay.workAreaSize;
 
   mainWindow = new BrowserWindow({
-    width: 340,
-    height: 80,
-    x: screenW - 360,
-    y: screenH - 100,
+    width: 200,
+    height: 32,
+    x: Math.round(screenW / 2 - 100),
+    y: screenH - 60,
     alwaysOnTop: true,
     skipTaskbar: true,
     frame: false,
     transparent: true,
     resizable: false,
     show: false,
+    hasShadow: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -36,8 +37,7 @@ function createWindow() {
   }
 
   mainWindow.on('blur', () => {
-    // Hide on blur so clicking away dismisses it
-    if (mainWindow && mainWindow.isVisible()) {
+    if (mainWindow && mainWindow.isVisible() && !recording) {
       mainWindow.hide();
     }
   });
@@ -47,29 +47,38 @@ function createWindow() {
   });
 }
 
+let recording = false;
+
+// Expose recording state for blur logic
+ipcMain.handle('parla:recording', (_e, val) => {
+  recording = val;
+});
+
 function toggleOverlay() {
   if (!mainWindow) return;
   if (mainWindow.isVisible()) {
     mainWindow.hide();
   } else {
-    mainWindow.showInactive(); // show without stealing focus
+    // Reposition near cursor
+    const { screen } = require('electron');
+    const cursor = screen.getCursorScreenPoint();
+    const disp = screen.getDisplayNearestPoint(cursor);
+    const barW = 200;
+    mainWindow.setPosition(
+      Math.max(0, Math.min(cursor.x - Math.round(barW / 2), disp.workArea.x + disp.workArea.width - barW)),
+      disp.workArea.y + disp.workArea.height - 60
+    );
+    mainWindow.showInactive();
   }
 }
 
-// Register global hotkey
 app.whenReady().then(() => {
   createWindow();
-
-  const registered = globalShortcut.register('CmdOrCtrl+Shift+P', toggleOverlay);
-  if (!registered) {
-    console.error('Failed to register global hotkey CmdOrCtrl+Shift+P');
-  }
+  globalShortcut.register('CmdOrCtrl+Shift+P', toggleOverlay);
 });
 
-// IPC: paste text into active app
 ipcMain.handle('parla:paste', (_event, text) => {
   clipboard.writeText(text);
-  // Simulate paste keystroke
   const platform = process.platform;
   let cmd;
   if (platform === 'darwin') {
@@ -82,10 +91,9 @@ ipcMain.handle('parla:paste', (_event, text) => {
   exec(cmd, (err) => {
     if (err) console.error('Paste failed:', err.message);
   });
-  // Auto-hide after paste
   setTimeout(() => {
     if (mainWindow) mainWindow.hide();
-  }, 200);
+  }, 300);
 });
 
 app.on('will-quit', () => {

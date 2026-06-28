@@ -3,49 +3,36 @@ import './App.css';
 
 type Mode = 'chat' | 'email' | 'search' | 'notes' | 'code';
 type Lang = 'es' | 'en' | 'pt';
-type Status = 'idle' | 'recording' | 'transcribing' | 'done';
-
-const LANGUAGES: Record<Lang, string> = {
-  es: 'ES',
-  en: 'EN',
-  pt: 'PT',
-};
+type Status = 'idle' | 'recording' | 'transcribing' | 'done' | 'error';
 
 function App() {
   const [mode, setMode] = useState<Mode>('chat');
   const [lang, setLang] = useState<Lang>('es');
   const [status, setStatus] = useState<Status>('idle');
-  const [error, setError] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
-  const startTime = useRef(0);
 
-  const modeIcon: Record<Mode, string> = {
-    chat: '💬',
-    email: '📧',
-    search: '🔍',
-    notes: '📝',
-    code: '💻',
-  };
-
-  // Auto-show on mount, ping backend
+  // Notify main process about recording state
   useEffect(() => {
-    fetch('http://localhost:3001/api/health')
-      .catch(() => setError('Backend no disponible'));
-  }, []);
+    const isRecording = status === 'recording';
+    (window as any).parla?.recording(isRecording);
+  }, [status]);
 
-  // Auto-hide 1.5s after done
+  // Reset idle after done
   useEffect(() => {
     if (status === 'done') {
-      const t = setTimeout(() => setStatus('idle'), 1500);
+      const t = setTimeout(() => setStatus('idle'), 1200);
+      return () => clearTimeout(t);
+    }
+    if (status === 'error') {
+      const t = setTimeout(() => setStatus('idle'), 2000);
       return () => clearTimeout(t);
     }
   }, [status]);
 
   const startRecording = useCallback(async () => {
     try {
-      setError('');
       chunks.current = [];
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
@@ -62,10 +49,9 @@ function App() {
       };
 
       recorder.start();
-      startTime.current = Date.now();
       setStatus('recording');
     } catch {
-      setError('Micrófono no disponible');
+      setStatus('error');
     }
   }, [mode, lang]);
 
@@ -95,79 +81,64 @@ function App() {
       if (text && (window as any).parla?.paste) {
         (window as any).parla.paste(text);
       }
-      setStatus('done');
-    } catch (err: any) {
-      setError(err.message || 'Error');
-      setStatus('idle');
+      setStatus(text ? 'done' : 'error');
+    } catch {
+      setStatus('error');
     }
   };
 
   const handleClick = () => {
     if (status === 'recording') {
       stopRecording();
-    } else if (status === 'idle' || status === 'done') {
+    } else if (status === 'idle') {
       startRecording();
     }
   };
 
-  const buttonContent = () => {
+  const barClass = () => {
     switch (status) {
-      case 'idle': return '🎤';
-      case 'recording': return '⏹';
-      case 'transcribing': return '⏳';
-      case 'done': return '✅';
-    }
-  };
-
-  const buttonClass = () => {
-    switch (status) {
-      case 'recording': return 'record-btn recording';
-      case 'transcribing': return 'record-btn transcribing';
-      case 'done': return 'record-btn done';
-      default: return 'record-btn';
+      case 'recording': return 'bar recording';
+      case 'transcribing': return 'bar transcribing';
+      case 'done': return 'bar done';
+      case 'error': return 'bar error';
+      default: return 'bar';
     }
   };
 
   return (
-    <div className="overlay" onMouseEnter={() => setShowSettings(true)} onMouseLeave={() => setShowSettings(false)}>
-      {/* Main button row */}
-      <div className="row">
-        <button className={buttonClass()} onClick={handleClick} disabled={status === 'transcribing'}>
-          {buttonContent()}
-        </button>
-        {status === 'recording' && <span className="status-recording">● Grabando</span>}
-        {status === 'transcribing' && <span className="status-transcribing">Transcribiendo...</span>}
-        {status === 'done' && <span className="status-done">✱ Pegado</span>}
+    <div
+      className="overlay"
+      onMouseEnter={() => setShowSettings(true)}
+      onMouseLeave={() => setShowSettings(false)}
+      onClick={handleClick}
+    >
+      <div className="bar-wrap">
+        <div className={barClass()}>
+          <div className="bar-fill" />
+          <div className="wave-container">
+            <span className="wave w1" />
+            <span className="wave w2" />
+            <span className="wave w3" />
+          </div>
+        </div>
       </div>
 
-      {/* Settings (show on hover) */}
-      {showSettings && status !== 'recording' && status !== 'transcribing' && (
+      {showSettings && status === 'idle' && (
         <div className="settings">
-          <div className="mode-icons">
-            {(Object.entries(modeIcon) as [Mode, string][]).map(([key, icon]) => (
-              <button
-                key={key}
-                className={`mode-icon-btn ${mode === key ? 'active' : ''}`}
-                onClick={() => setMode(key)}
-                title={key}
-              >
-                {icon}
-              </button>
-            ))}
-          </div>
-          <select
-            className="lang-select"
-            value={lang}
-            onChange={(e) => setLang(e.target.value as Lang)}
-          >
-            {Object.entries(LANGUAGES).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
+          <select value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+            <option value="chat">💬 Chat</option>
+            <option value="email">📧 Email</option>
+            <option value="search">🔍 Búsqueda</option>
+            <option value="notes">📝 Notas</option>
+            <option value="code">💻 Código</option>
+          </select>
+          <select value={lang} onChange={(e) => setLang(e.target.value as Lang)}>
+            <option value="es">ES</option>
+            <option value="en">EN</option>
+            <option value="pt">PT</option>
           </select>
         </div>
       )}
-
-      {error && <div className="error">{error}</div>}
     </div>
   );
 }
