@@ -1,0 +1,7 @@
+packages:
+  - 'packages/*'
+  - 'backend'
+  - 'apps/*'
+allowBuilds:
+  electron: set this to true or false
+  esbuild: set this to true or false

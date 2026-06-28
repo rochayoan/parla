@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Parla</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .header { padding: 16px 20px; background: white; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; gap: 12px; }
+    .header h1 { font-size: 18px; font-weight: 700; }
+    .mode-selector, .lang-selector { display: flex; gap: 4px; padding: 8px 20px; background: white; border-bottom: 1px solid #e2e8f0; overflow-x: auto; }
+    .mode-btn, .lang-btn { padding: 6px 14px; border-radius: 20px; border: 1px solid #e2e8f0; background: white; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+    .mode-btn:hover { background: #f1f5f9; }
+    .mode-btn.active { background: #1e293b; color: white; border-color: #1e293b; }
+    .lang-btn:hover { background: #f1f5f9; }
+    .lang-btn.active { background: #0891b2; color: white; border-color: #0891b2; }
+    .lang-btn.future { opacity: 0.4; cursor: not-allowed; }
+    .content { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; gap: 20px; }
+    .record-btn { width: 80px; height: 80px; border-radius: 50%; border: 3px solid #e2e8f0; background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-size: 32px; }
+    .record-btn:hover { border-color: #94a3b8; transform: scale(1.05); }
+    .record-btn.recording { border-color: #ef4444; background: #fef2f2; animation: pulse 1.5s ease infinite; }
+    .record-btn.processing { border-color: #f59e0b; background: #fffbeb; animation: none; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+    .status-text { font-size: 14px; color: #64748b; font-weight: 500; }
+    .result-box { width: 100%; max-height: 200px; padding: 16px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 14px; line-height: 1.6; overflow-y: auto; display: none; }
+    .result-box.show { display: block; }
+    .actions { display: flex; gap: 8px; }
+    .action-btn { padding: 8px 20px; border-radius: 8px; border: 1px solid #e2e8f0; background: white; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+    .action-btn:hover { background: #f1f5f9; }
+    .action-btn.primary { background: #1e293b; color: white; border-color: #1e293b; }
+    .action-btn.primary:hover { background: #334155; }
+    .footer { padding: 12px 20px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
+    .error-text { color: #ef4444; font-size: 13px; font-weight: 500; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <div class="header"><h1>🎙️ Parla</h1></div>
+  <div class="mode-selector" id="modeSelector"></div>
+  <div class="lang-selector" id="langSelector"></div>
+  <div class="content">
+    <button class="record-btn" id="recordBtn">🎤</button>
+    <span class="status-text" id="statusText">Toca para dictar</span>
+    <div class="result-box" id="resultBox"></div>
+    <div class="actions">
+      <button class="action-btn" id="copyBtn" disabled>📋 Copiar</button>
+      <button class="action-btn primary" id="pasteBtn" disabled>📌 Pegar (Ctrl+V)</button>
+    </div>
+    <div id="errorText" class="error-text"></div>
+  </div>
+  <div class="footer">Parla v0.1 · Dictado por voz · Espacio para grabar</div>
+  <script src="renderer.js"></script>
+</body>
+</html>
