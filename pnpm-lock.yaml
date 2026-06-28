@@ -61,7 +61,7 @@ importers:
         specifier: ^1.4.5-lts.1
         version: 1.4.5-lts.2
       openai:
-        specifier: ^4.104.0
+        specifier: ^4.73.0
         version: 4.104.0
     devDependencies:
       '@types/cors':
