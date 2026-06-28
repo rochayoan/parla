@@ -1,9 +1,10 @@
 import OpenAI from 'openai';
 
-const deepseek = new OpenAI({
-  apiKey: process.env.DEEPSEEK_API_KEY,
-  baseURL: 'https://api.deepseek.com/v1',
-});
+function getOpenAI(): OpenAI {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+}
 
 const DICTADO_PROMPT = `Eres un asistente de dictado. Tu única función es limpiar y corregir texto transcrito por voz.
 
@@ -24,15 +25,17 @@ export async function cleanText(rawText: string): Promise<string> {
   if (!rawText || rawText.trim().length === 0) return '';
 
   try {
-    const response = await deepseek.chat.completions.create({
-      model: 'deepseek-chat',
+    const openai = getOpenAI();
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: `${DICTADO_PROMPT}\n${rawText}` }],
       temperature: 0.3,
       max_tokens: 1000,
     });
 
     return response.choices[0]?.message?.content?.trim() || rawText;
-  } catch {
+  } catch (error) {
+    console.error('Error en cleanText:', error);
     return rawText;
   }
 }
